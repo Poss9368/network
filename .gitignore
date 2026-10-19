@@ -1,0 +1,42 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editor settings and temporary files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# JavaScript / Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Generated output
+build/
+dist/
+coverage/
+*.egg-info/
+
+
+# rust 
+target/
+cargo.lock
