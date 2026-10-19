@@ -15,8 +15,8 @@ pub struct Fire {
 impl Default for Fire {
     fn default() -> Self {
         Self {
-            force_tolerance: 1e-8,
-            max_steps: 100_000,
+            force_tolerance: 1e-12,
+            max_steps: 1_000_000,
             initial_dt: 0.01,
             max_dt: 0.1,
         }

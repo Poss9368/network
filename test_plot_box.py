@@ -18,6 +18,74 @@ from plot_box import (
 
 
 class PeriodicContactTests(unittest.TestCase):
+    def test_cli_reads_default_steps_details_and_keeps_pngs_in_output_plots(self):
+        from unittest.mock import patch
+        from plot_box import main
+
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            steps = project / "output" / "steps_details"
+            steps.mkdir(parents=True)
+            (steps / "sample_step_0001.dat").write_text(
+                "2.0 -1.1\n1.9 1.0 1 -1\n0.1 1.0 0 -1\n"
+            )
+            with patch("sys.argv", ["plot_box.py", "sample", "--dpi", "60"]), patch(
+                "plot_box.__file__", str(project / "plot_box.py")
+            ):
+                main()
+            self.assertTrue((project / "output" / "plots" / "sample_step_0001.png").is_file())
+            self.assertFalse((project / "output" / "plots" / "sample.gif").exists())
+
+    def test_cli_gif_uses_numeric_step_order_and_only_selected_frames(self):
+        from unittest.mock import patch
+        from PIL import Image
+        from plot_box import main
+
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            steps = project / "steps"
+            plots = project / "plots"
+            steps.mkdir()
+            plots.mkdir()
+            colors = {1: (255, 0, 0), 2: (0, 255, 0), 10: (0, 0, 255)}
+            for step in [10, 2, 1]:
+                (steps / f"sample_step_{step}.dat").touch()
+            Image.new("RGB", (8, 8), "black").save(plots / "sample_step_0099.png")
+
+            def render(path, destination, dpi):
+                step = int(path.stem.rsplit("_", 1)[1])
+                Image.new("RGB", (8, 8), colors[step]).save(destination)
+                return 0, 0
+
+            argv = ["plot_box.py", "sample", "--output-dir", str(steps),
+                    "--plot-dir", str(plots), "--gif", "--gif-duration", "300"]
+            with patch("sys.argv", argv), patch("plot_box.plot_step", side_effect=render):
+                main()
+            with Image.open(plots / "sample.gif") as gif:
+                self.assertEqual(gif.n_frames, 3)
+                self.assertEqual(gif.info["loop"], 0)
+                for index, step in enumerate([1, 2, 10]):
+                    gif.seek(index)
+                    self.assertEqual(gif.info["duration"], 300)
+                    self.assertEqual(gif.convert("RGB").getpixel((0, 0)), colors[step])
+            with patch("sys.argv", argv + ["--step", "2"]), patch("plot_box.plot_step", side_effect=render):
+                main()
+            with Image.open(plots / "sample.gif") as gif:
+                self.assertEqual(gif.n_frames, 1)
+                self.assertEqual(gif.convert("RGB").getpixel((0, 0)), colors[2])
+
+    def test_cli_rejects_invalid_gif_durations(self):
+        from unittest.mock import patch
+        from io import StringIO
+        from plot_box import main
+
+        for duration in ["0", "-10", "5", "15"]:
+            with self.subTest(duration=duration), patch(
+                "sys.argv", ["plot_box.py", "sample", "--gif", "--gif-duration", duration]
+            ), patch("sys.stderr", new_callable=StringIO), self.assertRaises(SystemExit) as error:
+                main()
+            self.assertEqual(error.exception.code, 2)
+
     def test_inside_box(self):
         segments = split_periodic_contact((0.2, 0.3), (0.4, 0.3), 1.0)
         np.testing.assert_allclose(segments, [[(0.2, 0.3), (0.4, 0.3)]])

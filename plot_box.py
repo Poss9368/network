@@ -1,7 +1,8 @@
 """Dibuja cada red en una caja unitaria centrada y marca cruces entre enlaces.
 
 Uso: python3 plot_box.py network_4096_4.300_0000
-Dependencias: numpy y matplotlib.
+Agrega --gif para generar también una animación de los pasos seleccionados.
+Dependencias: numpy, matplotlib y Pillow.
 """
 
 import argparse
@@ -16,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.patches import Rectangle
 import numpy as np
+from PIL import Image
 
 
 def find_steps(system, output_dir):
@@ -199,28 +201,58 @@ def plot_step(path, destination, dpi):
     return len(contacts), len(crossings)
 
 
+def create_gif(paths, destination, duration):
+    """Une los PNG de esta ejecución en orden, con repetición infinita."""
+    if not paths:
+        raise ValueError("No hay imágenes para crear el GIF")
+    frames = []
+    try:
+        for path in paths:
+            with Image.open(path) as source:
+                frames.append(source.convert("RGB").quantize(colors=256))
+        frames[0].save(destination, format="GIF", save_all=True,
+                       append_images=frames[1:], duration=duration, loop=0, disposal=2)
+    finally:
+        for frame in frames:
+            frame.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("system", help="Nombre del sistema, con o sin .dat")
-    parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parent / "output")
+    project_output = Path(__file__).resolve().parent / "output"
+    parser.add_argument("--output-dir", type=Path, default=project_output / "steps_details",
+                        help="Carpeta de los estados; por defecto output/steps_details")
     parser.add_argument("--plot-dir", type=Path, help="Destino de los PNG; por defecto output/plots")
     parser.add_argument("--step", type=int, help="Dibujar solo este paso en la misma caja unitaria")
     parser.add_argument("--dpi", type=int, default=180)
+    parser.add_argument("--gif", action="store_true", help="Crear también <sistema>.gif junto a los PNG")
+    parser.add_argument("--gif-duration", type=int, default=200,
+                        help="Milisegundos por cuadro del GIF, múltiplo positivo de 10; por defecto 200")
     args = parser.parse_args()
     if args.dpi <= 0:
         parser.error("--dpi debe ser positivo")
+    if args.gif_duration < 10 or args.gif_duration % 10 != 0:
+        parser.error("--gif-duration debe ser un múltiplo positivo de 10 milisegundos")
     try:
         system, steps = find_steps(args.system, args.output_dir)
         if args.step is not None:
             steps = [(step, path) for step, path in steps if step == args.step]
             if not steps:
                 raise ValueError(f"No existe el paso {args.step} para {system}")
-        plot_dir = args.plot_dir or args.output_dir / "plots"
+        default_plot_dir = project_output / "plots" if args.output_dir == project_output / "steps_details" else args.output_dir / "plots"
+        plot_dir = args.plot_dir or default_plot_dir
         plot_dir.mkdir(parents=True, exist_ok=True)
+        images = []
         for step, path in steps:
             destination = plot_dir / f"{system}_step_{step:04d}.png"
             contacts, crossings = plot_step(path, destination, args.dpi)
+            images.append(destination)
             print(f"{destination} ({contacts} contactos, {crossings} cruces entre enlaces)")
+        if args.gif:
+            destination = plot_dir / f"{system}.gif"
+            create_gif(images, destination, args.gif_duration)
+            print(f"GIF: {destination} ({len(images)} pasos, {args.gif_duration} ms por cuadro)")
     except (OSError, ValueError, IndexError) as error:
         parser.exit(1, f"Error: {error}\n")
 
